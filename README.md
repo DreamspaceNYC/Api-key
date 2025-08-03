@@ -12,4 +12,7 @@ python main.py
 
 POST a JSON payload containing a `url` field to `/analyze`.
 
-OpenAPI specification is available in `openapi.yaml`.
+Additional endpoints:
+* `GET /` simple health check.
+* `POST /ytlarge-info` accepts a JSON body with `url` and returns simulated video insights.
+* OpenAPI specification is available in `openapi.yaml`.

@@ -3,12 +3,67 @@ info:
   title: ytlargeGPT
   version: '1.0.0'
 paths:
+  /:
+    get:
+      summary: Service health check
+      responses:
+        '200':
+          description: API status message
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: YTLarge GPT API is live!
+  /ytlarge-info:
+    post:
+      summary: Return simulated video insights
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                url:
+                  type: string
+                  description: YouTube video URL
+      responses:
+        '200':
+          description: Simulated YouTube data
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  monetized:
+                    type: boolean
+                  authenticity:
+                    type: string
+                  estimatedEarnings:
+                    type: string
+                  tags:
+                    type: array
+                    items:
+                      type: string
+                  metadata:
+                    type: object
+                    properties:
+                      title:
+                        type: string
+                      uploadDate:
+                        type: string
+                        format: date
+                      category:
+                        type: string
+                      views:
+                        type: integer
   /analyze:
     post:
       summary: Analyze a YouTube video
-      description: >-
-        Accepts a YouTube video URL and returns metadata and a simulated
-        monetization flag.
+      description: Accepts a YouTube video URL and returns metadata and a simulated monetization flag.
       requestBody:
         required: true
         content:
@@ -19,34 +74,4 @@ paths:
                 url:
                   type: string
                   description: Full YouTube video URL
-                  example: https://www.youtube.com/watch?v=dQw4w9WgXcQ
-      responses:
-        '200':
-          description: Video analysis results
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  title:
-                    type: string
-                  channelId:
-                    type: string
-                  channelTitle:
-                    type: string
-                  views:
-                    type: integer
-                  uploadDate:
-                    type: string
-                    format: date
-                  category:
-                    type: string
-                  tags:
-                    type: array
-                    items:
-                      type: string
-                  monetized:
-                    type: boolean
-servers:
-  - url: http://localhost:8000
-    description: Local development server
+                  example: https://www.youtube.com/watch?v=dQw4w9
