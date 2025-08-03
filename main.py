@@ -5,7 +5,7 @@ import httpx
 from urllib.parse import urlparse, parse_qs
 from typing import List
 
-# Hard-coded YouTube API key
+# Hard-coded key so container always starts
 YOUTUBE_API_KEY = "AIzaSyD9-pgZDBpYk0Mz3j8MdERoaATq5fSg1tE"
 
 # Initialize the FastAPI app with the custom domain and OpenAPI schema configuration
@@ -59,8 +59,7 @@ class InfoResponse(BaseModel):
     authenticity: str
     estimatedEarnings: str
     tags: List[str]
-    metadata: BaseModel
-    metadata = Metadata
+    metadata: Metadata
 
 class Metadata(BaseModel):
     title: str
@@ -86,7 +85,6 @@ async def health() -> HealthOut:
 
 @app.post("/ytlarge-info", response_model=InfoResponse)
 async def ytlarge_info(req: URLRequest) -> InfoResponse:
-    _ = req.url
     return InfoResponse(
         monetized=True,
         authenticity="high",
