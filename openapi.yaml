@@ -63,9 +63,7 @@ paths:
   /analyze:
     post:
       summary: Analyze a YouTube video
-      description: >-
-        Accepts a YouTube video URL and returns metadata and a simulated
-        monetization flag.
+      description: Accepts a YouTube video URL and returns metadata and a simulated monetization flag.
       requestBody:
         required: true
         content:
@@ -76,34 +74,4 @@ paths:
                 url:
                   type: string
                   description: Full YouTube video URL
-                  example: https://www.youtube.com/watch?v=dQw4w9WgXcQ
-      responses:
-        '200':
-          description: Video analysis results
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  title:
-                    type: string
-                  channelId:
-                    type: string
-                  channelTitle:
-                    type: string
-                  views:
-                    type: integer
-                  uploadDate:
-                    type: string
-                    format: date
-                  category:
-                    type: string
-                  tags:
-                    type: array
-                    items:
-                      type: string
-                  monetized:
-                    type: boolean
-servers:
-  - url: http://localhost:8000
-    description: Local development server
+                  example: https://www.youtube.com/watch?v=dQw4w9

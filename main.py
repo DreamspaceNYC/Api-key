@@ -4,8 +4,12 @@ from pydantic import BaseModel
 import httpx
 from urllib.parse import urlparse, parse_qs
 from typing import List
+import os
 
-YOUTUBE_API_KEY = "AIzaSyD9-pgZDBpYk0Mz3j8MdERoaATq5fSg1tE"
+# Load API key securely
+YOUTUBE_API_KEY = os.getenv("YOUTUBE_API_KEY")
+if not YOUTUBE_API_KEY:
+    raise ValueError("YOUTUBE_API_KEY environment variable is required")
 
 app = FastAPI(title="ytlargeGPT")
 
@@ -17,6 +21,24 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Models for /ytlarge-info
+class URLRequest(BaseModel):
+    url: str
+
+class Metadata(BaseModel):
+    title: str
+    uploadDate: str
+    category: str
+    views: int
+
+class InfoResponse(BaseModel):
+    monetized: bool
+    authenticity: str
+    estimatedEarnings: str
+    tags: List[str]
+    metadata: Metadata
+
+# Models for /analyze
 class AnalyzeRequest(BaseModel):
     url: str
 
@@ -30,25 +52,7 @@ class AnalyzeResponse(BaseModel):
     tags: List[str]
     monetized: bool
 
-
-class URLRequest(BaseModel):
-    url: str
-
-
-class Metadata(BaseModel):
-    title: str
-    uploadDate: str
-    category: str
-    views: int
-
-
-class InfoResponse(BaseModel):
-    monetized: bool
-    authenticity: str
-    estimatedEarnings: str
-    tags: List[str]
-    metadata: Metadata
-
+# Video ID extractor
 def extract_video_id(url: str) -> str:
     parsed = urlparse(url)
     if parsed.hostname in ("youtu.be", "www.youtu.be"):
@@ -61,11 +65,9 @@ def extract_video_id(url: str) -> str:
             return parsed.path.split("/")[2]
     raise ValueError("Invalid YouTube URL")
 
-
 @app.get("/")
 async def health() -> dict:
     return {"status": "YTLarge GPT API is live!"}
-
 
 @app.post("/ytlarge-info", response_model=InfoResponse)
 async def ytlarge_info(req: URLRequest) -> InfoResponse:
@@ -88,7 +90,7 @@ async def analyze(req: AnalyzeRequest):
     try:
         video_id = extract_video_id(req.url)
     except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail=str(e)) from e
 
     async with httpx.AsyncClient() as client:
         video_resp = await client.get(
@@ -98,18 +100,19 @@ async def analyze(req: AnalyzeRequest):
                 "id": video_id,
                 "key": YOUTUBE_API_KEY,
             },
+            timeout=10.0
         )
         video_data = video_resp.json()
         items = video_data.get("items", [])
         if not items:
             raise HTTPException(status_code=404, detail="Video not found")
+
         video = items[0]
         snippet = video.get("snippet", {})
         statistics = video.get("statistics", {})
         status = video.get("status", {})
         channel_id = snippet.get("channelId")
 
-        # Fetch channel status
         channel_resp = await client.get(
             "https://www.googleapis.com/youtube/v3/channels",
             params={
@@ -121,7 +124,6 @@ async def analyze(req: AnalyzeRequest):
         channel_items = channel_resp.json().get("items", [])
         channel_status = channel_items[0]["status"] if channel_items else {}
 
-        # Fetch category title
         category_resp = await client.get(
             "https://www.googleapis.com/youtube/v3/videoCategories",
             params={
@@ -151,7 +153,6 @@ async def analyze(req: AnalyzeRequest):
             tags=snippet.get("tags", []),
             monetized=monetized,
         )
-
 
 if __name__ == "__main__":
     import uvicorn
