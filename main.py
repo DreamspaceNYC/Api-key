@@ -1,7 +1,6 @@
 """
-FastAPI service: ytlargeGPT
-No external env-vars are **required** to boot the service.
-The YouTube API key is hard-coded (safe for demo / internal builds).
+YTLargeGPT — Leapcell edition
+No environment variables required.
 """
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -10,12 +9,24 @@ import httpx
 from urllib.parse import urlparse, parse_qs
 from typing import List
 
-# ------------------------------------------------------------------
-# 🔑  Hard-wired key – container will start even if no env var exists
-# ------------------------------------------------------------------
+# --------------------------------------------------
+# 🔑  Hard-coded key — container always starts
+# --------------------------------------------------
 YOUTUBE_API_KEY = "AIzaSyD9-pgZDBpYk0Mz3j8MdERoaATq5fSg1tE"
 
-app = FastAPI(title="ytlargeGPT")
+# --------------------------------------------------
+# FastAPI instance with correct public host
+# --------------------------------------------------
+app = FastAPI(
+    title="ytlargeGPT",
+    version="1.0.0",
+    servers=[
+        {
+            "url": "https://pi-key-dreamspacenyc8289-azfv8ofe.leapcell.dev",
+            "description": "Leapcell production"
+        }
+    ]
+)
 
 app.add_middleware(
     CORSMiddleware,
@@ -25,6 +36,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# --------------------------------------------------
+# Pydantic models
+# --------------------------------------------------
 class AnalyzeRequest(BaseModel):
     url: str
 
@@ -54,6 +68,9 @@ class InfoResponse(BaseModel):
     tags: List[str]
     metadata: Metadata
 
+# --------------------------------------------------
+# Helpers
+# --------------------------------------------------
 def extract_video_id(url: str) -> str:
     parsed = urlparse(url)
     if parsed.hostname in ("youtu.be", "www.youtu.be"):
@@ -66,13 +83,15 @@ def extract_video_id(url: str) -> str:
             return parsed.path.split("/")[2]
     raise ValueError("Invalid YouTube URL")
 
+# --------------------------------------------------
+# Routes
+# --------------------------------------------------
 @app.get("/")
 async def health() -> dict:
     return {"status": "YTLarge GPT API is live!"}
 
 @app.post("/ytlarge-info", response_model=InfoResponse)
 async def ytlarge_info(req: URLRequest) -> InfoResponse:
-    _ = req.url
     return InfoResponse(
         monetized=True,
         authenticity="high",
@@ -94,6 +113,7 @@ async def analyze(req: AnalyzeRequest):
         raise HTTPException(status_code=400, detail=str(e)) from e
 
     async with httpx.AsyncClient() as client:
+        # --- YouTube videos endpoint ---
         video_resp = await client.get(
             "https://www.googleapis.com/youtube/v3/videos",
             params={
@@ -112,6 +132,7 @@ async def analyze(req: AnalyzeRequest):
         status = video.get("status", {})
         channel_id = snippet.get("channelId")
 
+        # --- YouTube channels endpoint ---
         channel_resp = await client.get(
             "https://www.googleapis.com/youtube/v3/channels",
             params={
@@ -123,6 +144,7 @@ async def analyze(req: AnalyzeRequest):
         channel_items = channel_resp.json().get("items", [])
         channel_status = channel_items[0]["status"] if channel_items else {}
 
+        # --- YouTube videoCategories endpoint ---
         category_resp = await client.get(
             "https://www.googleapis.com/youtube/v3/videoCategories",
             params={
