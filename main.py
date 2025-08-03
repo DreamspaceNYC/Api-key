@@ -1,5 +1,5 @@
 """
-YTLargeGPT — Leapcell edition
+YTLargeGPT — Leapcell final build
 No environment variables required.
 """
 from fastapi import FastAPI, HTTPException
@@ -9,22 +9,15 @@ import httpx
 from urllib.parse import urlparse, parse_qs
 from typing import List
 
-# --------------------------------------------------
-# 🔑  Hard-coded key — container always starts
-# --------------------------------------------------
+# 1. Hard-coded key so container always starts
 YOUTUBE_API_KEY = "AIzaSyD9-pgZDBpYk0Mz3j8MdERoaATq5fSg1tE"
 
-# --------------------------------------------------
-# FastAPI instance with correct public host
-# --------------------------------------------------
+# 2. Public host so GPT Builder finds the correct server
 app = FastAPI(
     title="ytlargeGPT",
     version="1.0.0",
     servers=[
-        {
-            "url": "https://pi-key-dreamspacenyc8289-azfv8ofe.leapcell.dev",
-            "description": "Leapcell production"
-        }
+        {"url": "https://pi-key-dreamspacenyc8289-azfv8ofe.leapcell.dev", "description": "Leapcell production"}
     ]
 )
 
@@ -37,8 +30,11 @@ app.add_middleware(
 )
 
 # --------------------------------------------------
-# Pydantic models
+# Pydantic schemas (explicit so GPT Builder is happy)
 # --------------------------------------------------
+class HealthOut(BaseModel):
+    status: str
+
 class AnalyzeRequest(BaseModel):
     url: str
 
@@ -69,7 +65,7 @@ class InfoResponse(BaseModel):
     metadata: Metadata
 
 # --------------------------------------------------
-# Helpers
+# Helper
 # --------------------------------------------------
 def extract_video_id(url: str) -> str:
     parsed = urlparse(url)
@@ -86,9 +82,9 @@ def extract_video_id(url: str) -> str:
 # --------------------------------------------------
 # Routes
 # --------------------------------------------------
-@app.get("/")
-async def health() -> dict:
-    return {"status": "YTLarge GPT API is live!"}
+@app.get("/", response_model=HealthOut)
+async def health() -> HealthOut:
+    return HealthOut(status="YTLarge GPT API is live!")
 
 @app.post("/ytlarge-info", response_model=InfoResponse)
 async def ytlarge_info(req: URLRequest) -> InfoResponse:
@@ -113,7 +109,6 @@ async def analyze(req: AnalyzeRequest):
         raise HTTPException(status_code=400, detail=str(e)) from e
 
     async with httpx.AsyncClient() as client:
-        # --- YouTube videos endpoint ---
         video_resp = await client.get(
             "https://www.googleapis.com/youtube/v3/videos",
             params={
@@ -132,7 +127,6 @@ async def analyze(req: AnalyzeRequest):
         status = video.get("status", {})
         channel_id = snippet.get("channelId")
 
-        # --- YouTube channels endpoint ---
         channel_resp = await client.get(
             "https://www.googleapis.com/youtube/v3/channels",
             params={
@@ -144,7 +138,6 @@ async def analyze(req: AnalyzeRequest):
         channel_items = channel_resp.json().get("items", [])
         channel_status = channel_items[0]["status"] if channel_items else {}
 
-        # --- YouTube videoCategories endpoint ---
         category_resp = await client.get(
             "https://www.googleapis.com/youtube/v3/videoCategories",
             params={
