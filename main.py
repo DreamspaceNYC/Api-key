@@ -6,8 +6,8 @@ from urllib.parse import urlparse, parse_qs
 from typing import List
 import os
 
-# Load API key securely
 YOUTUBE_API_KEY = os.getenv("YOUTUBE_API_KEY")
+
 if not YOUTUBE_API_KEY:
     raise ValueError("YOUTUBE_API_KEY environment variable is required")
 
@@ -21,7 +21,19 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Models for /ytlarge-info
+class AnalyzeRequest(BaseModel):
+    url: str
+
+class AnalyzeResponse(BaseModel):
+    title: str
+    channelId: str
+    channelTitle: str
+    views: int
+    uploadDate: str
+    category: str
+    tags: List[str]
+    monetized: bool
+
 class URLRequest(BaseModel):
     url: str
 
@@ -38,21 +50,6 @@ class InfoResponse(BaseModel):
     tags: List[str]
     metadata: Metadata
 
-# Models for /analyze
-class AnalyzeRequest(BaseModel):
-    url: str
-
-class AnalyzeResponse(BaseModel):
-    title: str
-    channelId: str
-    channelTitle: str
-    views: int
-    uploadDate: str
-    category: str
-    tags: List[str]
-    monetized: bool
-
-# Video ID extractor
 def extract_video_id(url: str) -> str:
     parsed = urlparse(url)
     if parsed.hostname in ("youtu.be", "www.youtu.be"):
@@ -93,20 +90,24 @@ async def analyze(req: AnalyzeRequest):
         raise HTTPException(status_code=400, detail=str(e)) from e
 
     async with httpx.AsyncClient() as client:
-        video_resp = await client.get(
-            "https://www.googleapis.com/youtube/v3/videos",
-            params={
-                "part": "snippet,statistics,status",
-                "id": video_id,
-                "key": YOUTUBE_API_KEY,
-            },
-            timeout=10.0
-        )
+        try:
+            video_resp = await client.get(
+                "https://www.googleapis.com/youtube/v3/videos",
+                params={
+                    "part": "snippet,statistics,status",
+                    "id": video_id,
+                    "key": YOUTUBE_API_KEY,
+                },
+                timeout=10.0
+            )
+            video_resp.raise_for_status()
+        except httpx.HTTPError:
+            raise HTTPException(status_code=502, detail="YouTube API error")
+
         video_data = video_resp.json()
         items = video_data.get("items", [])
         if not items:
             raise HTTPException(status_code=404, detail="Video not found")
-
         video = items[0]
         snippet = video.get("snippet", {})
         statistics = video.get("statistics", {})
