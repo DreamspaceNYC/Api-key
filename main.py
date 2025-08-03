@@ -1,8 +1,3 @@
-"""
-YTLargeGPT — Leapcell final build
-No environment variables required.
-"""
-
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -10,15 +5,28 @@ import httpx
 from urllib.parse import urlparse, parse_qs
 from typing import List
 
-# 1. Hard-coded key so container always starts
+# Hard-coded YouTube API key
 YOUTUBE_API_KEY = "AIzaSyD9-pgZDBpYk0Mz3j8MdERoaATq5fSg1tE"
 
-# 2. Public host so GPT Builder finds the correct server
+# Initialize the FastAPI app with the custom domain and OpenAPI schema configuration
 app = FastAPI(
-    title="ytlargeGPT",
+    title="YTLargeGPT",
     version="1.0.0",
+    description="This is a sample server for YTLargeGPT.",
+    contact={
+        "name": "Your Name",
+        "url": "https://example.com",
+        "email": "your.email@example.com",
+    },
+    license_info={
+        "name": "MIT",
+        "url": "https://opensource.org/licenses/MIT",
+    },
     servers=[
-        {"url": "https://pi-key-dreamspacenyc8289-azfv8ofe.leapcell.dev", "description": "Leapcell production"}
+        {
+            "url": "https://ayongengine.leapcell.app",
+            "description": "Production server"
+        }
     ]
 )
 
@@ -30,9 +38,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# --------------------------------------------------
-# Pydantic schemas (explicit so GPT Builder is happy)
-# --------------------------------------------------
 class HealthOut(BaseModel):
     status: str
 
@@ -49,8 +54,13 @@ class AnalyzeResponse(BaseModel):
     tags: List[str]
     monetized: bool
 
-class URLRequest(BaseModel):
-    url: str
+class InfoResponse(BaseModel):
+    monetized: bool
+    authenticity: str
+    estimatedEarnings: str
+    tags: List[str]
+    metadata: BaseModel
+    metadata = Metadata
 
 class Metadata(BaseModel):
     title: str
@@ -58,16 +68,6 @@ class Metadata(BaseModel):
     category: str
     views: int
 
-class InfoResponse(BaseModel):
-    monetized: bool
-    authenticity: str
-    estimatedEarnings: str
-    tags: List[str]
-    metadata: Metadata
-
-# --------------------------------------------------
-# Helper
-# --------------------------------------------------
 def extract_video_id(url: str) -> str:
     parsed = urlparse(url)
     if parsed.hostname in ("youtu.be", "www.youtu.be"):
@@ -80,15 +80,13 @@ def extract_video_id(url: str) -> str:
             return parsed.path.split("/")[2]
     raise ValueError("Invalid YouTube URL")
 
-# --------------------------------------------------
-# Routes
-# --------------------------------------------------
 @app.get("/", response_model=HealthOut)
 async def health() -> HealthOut:
     return HealthOut(status="YTLarge GPT API is live!")
 
 @app.post("/ytlarge-info", response_model=InfoResponse)
 async def ytlarge_info(req: URLRequest) -> InfoResponse:
+    _ = req.url
     return InfoResponse(
         monetized=True,
         authenticity="high",
