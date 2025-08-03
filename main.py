@@ -1,215 +1,131 @@
-"""
-Full YTLarge 2025 clone – FastAPI service ready for Leapcell
-Implements every public tool listed in https://ytlarge.com/faq
-"""
-from __future__ import annotations
-
-import asyncio
+from flask import Flask, request, jsonify
+from googleapiclient.discovery import build
+from urllib.parse import urlparse, parse_qs
 import re
-from typing import List, Optional, Dict, Any
+import os
 
-import httpx
-from bs4 import BeautifulSoup
-from fastapi import FastAPI, HTTPException, Query
-from pydantic import BaseModel, Field
+app = Flask(__name__)
 
-# -------------------------------------------------- #
-# Pydantic models                                    #
-# -------------------------------------------------- #
+# YouTube API setup (replace with your API key)
+YOUTUBE_API_KEY = os.environ.get('YOUTUBE_API_KEY', 'YOUR_API_KEY_HERE')
+youtube = build('youtube', 'v3', developerKey=YOUTUBE_API_KEY)
 
-class ChannelIdResponse(BaseModel):
-    channel_id: str
+def extract_video_id(url):
+    """Extract video ID from YouTube URL."""
+    if not url:
+        return None
+    parsed = urlparse(url)
+    if parsed.hostname in ('youtu.be', 'www.youtu.be'):
+        return parsed.path.lstrip('/')
+    if parsed.hostname in ('www.youtube.com', 'youtube.com'):
+        if parsed.path == '/watch':
+            return parse_qs(parsed.query).get('v', [None])[0]
+        if parsed.path.startswith('/embed/'):
+            return parsed.path.split('/')[2]
+    return None
 
-class DataViewerResponse(BaseModel):
-    id: str
-    title: str
-    published_at: str
-    channel_id: str
-    channel_title: str
-    view_count: int
-    like_count: int
-    comment_count: int
-    category: str
-    duration: str  # ISO8601
-    definition: str
-    made_for_kids: bool
-    privacy_status: str
+def extract_channel_id(channel_input):
+    """Extract channel ID from input (URL or ID)."""
+    if channel_input.startswith('UC') and len(channel_input) == 24:
+        return channel_input
+    match = re.match(r'(?:https?:\/\/)?(?:www\.)?youtube\.com\/(?:channel\/|user\/)?([a-zA-Z0-9_-]{24})', channel_input)
+    return match.group(1) if match else None
 
-class TagResponse(BaseModel):
-    tags: List[str]
-
-class MonetizationResponse(BaseModel):
-    is_monetized: bool
-    reason: str
-    estimated_revenue: Optional[float] = None  # USD
-
-class EarningsRequest(BaseModel):
-    views: int
-    cpm: float = Field(3.0, ge=0)
-
-class EarningsResponse(BaseModel):
-    estimated_revenue: float
-
-class ShadowbanResponse(BaseModel):
-    status: str = "Shadowban detector discontinued as of Aug-12-2024"
-
-# -------------------------------------------------- #
-# Helpers                                            #
-# -------------------------------------------------- #
-
-CHANNEL_ID_RE = re.compile(r"UC[\w\-]{22}")
-VIDEO_ID_RE = re.compile(r"(?:v=|\/)([0-9A-Za-z_-]{11}).*")
-
-def extract_video_id(url: str) -> str:
-    m = VIDEO_ID_RE.search(url)
-    if not m:
-        raise ValueError("Bad video URL")
-    return m.group(1)
-
-def extract_channel_id(url: str) -> str:
-    # Accept /c/, /channel/, handle, or plain ID
-    for candidate in url.split("/"):
-        if CHANNEL_ID_RE.fullmatch(candidate):
-            return candidate
-    raise ValueError("Bad channel URL")
-
-http = httpx.AsyncClient(timeout=30.0)
-
-# -------------------------------------------------- #
-# FastAPI app                                        #
-# -------------------------------------------------- #
-
-app = FastAPI(
-    title="YTLarge 2025 Clone",
-    description="Drop-in replacement for every tool listed at https://ytlarge.com/faq",
-    version="2025.1.0",
-)
-
-# ---------- Channel-ID Finder ------------------------------------------
-@app.get("/channel-id", response_model=ChannelIdResponse)
-async def channel_id(url: str = Query(..., description="Channel URL or @handle")):
-    return ChannelIdResponse(channel_id=extract_channel_id(url))
-
-# ---------- Data Viewer -------------------------------------------------
-@app.get("/data-viewer", response_model=DataViewerResponse)
-async def data_viewer(video_url_or_id: str = Query(..., alias="video")):
-    vid = extract_video_id(video_url_or_id)
-    url = f"https://www.googleapis.com/youtube/v3/videos"
-    params = {
-        "part": "snippet,contentDetails,statistics,status",
-        "id": vid,
-        "key": None,  # Inject YT_API_KEY=... at runtime
-    }
-    r = await http.get(url, params=params)
-    if r.status_code == 403:
-        raise HTTPException(503, "YouTube Data API quota exhausted or key missing")
-    if r.is_error:
-        raise HTTPException(r.status_code, "Upstream error")
-
-    items = r.json().get("items", [])
-    if not items:
-        raise HTTPException(404, "Video not found")
-    item = items[0]
-
-    return DataViewerResponse(
-        id=item["id"],
-        title=item["snippet"]["title"],
-        published_at=item["snippet"]["publishedAt"],
-        channel_id=item["snippet"]["channelId"],
-        channel_title=item["snippet"]["channelTitle"],
-        view_count=int(item["statistics"].get("viewCount", 0)),
-        like_count=int(item["statistics"].get("likeCount", 0)),
-        comment_count=int(item["statistics"].get("commentCount", 0)),
-        category=item["snippet"]["categoryId"],
-        duration=item["contentDetails"]["duration"],
-        definition=item["contentDetails"].get("definition", ""),
-        made_for_kids=item["status"].get("madeForKids", False),
-        privacy_status=item["status"]["privacyStatus"],
-    )
-
-# ---------- Tag Extractor ---------------------------------------------
-@app.get("/tags", response_model=TagResponse)
-async def tags(video_url_or_id: str = Query(..., alias="video")):
-    vid = extract_video_id(video_url_or_id)
-    url = "https://www.googleapis.com/youtube/v3/videos"
-    params = {
-        "part": "snippet",
-        "id": vid,
-        "key": None,  # Inject YT_API_KEY=... at runtime
-    }
-    r = await http.get(url, params=params)
-    if r.status_code == 403:
-        raise HTTPException(503, "YouTube Data API quota exhausted or key missing")
-    items = r.json().get("items", [])
-    if not items:
-        raise HTTPException(404, "Video not found")
-    snippet = items[0]["snippet"]
-    tag_list = snippet.get("tags", [])
-    return TagResponse(tags=tag_list)
-
-# ---------- Monetization Checker ---------------------------------------
-@app.get("/monetization-checker", response_model=MonetizationResponse)
-async def monetization_check(url: str = Query(..., description="Video or channel URL")):
-    # Decide if it's channel or video
+def get_video_stats(video_id):
+    """Fetch video stats using YouTube API."""
     try:
-        vid = extract_video_id(url)
-        target_type = "video"
-    except ValueError:
-        try:
-            cid = extract_channel_id(url)
-            target_type = "channel"
-        except ValueError:
-            raise HTTPException(400, "Invalid YouTube URL")
+        response = youtube.videos().list(
+            part='snippet,statistics,contentDetails',
+            id=video_id
+        ).execute()
+        if not response['items']:
+            return {'error': 'Video not found'}
+        item = response['items'][0]
+        duration = item['contentDetails'].get('duration', 'PT0S')
+        # Basic authenticity check: short duration or specific tags may indicate non-original content
+        is_original = not ('shorts' in item['snippet'].get('tags', []) or 'PT1M' in duration)
+        return {
+            'title': item['snippet']['title'],
+            'views': item['statistics'].get('viewCount', '0'),
+            'likes': item['statistics'].get('likeCount', '0'),
+            'comments': item['statistics'].get('commentCount', '0'),
+            'published_at': item['snippet']['publishedAt'],
+            'is_original': is_original
+        }
+    except Exception as e:
+        return {'error': str(e)}
 
-    watch_url = f"https://www.youtube.com/watch?v={vid}" if target_type == "video" else f"https://www.youtube.com/channel/{cid}"
-    r = await http.get(watch_url)
-    if r.status_code == 404:
-        raise HTTPException(404, f"{target_type.title()} not found")
+def get_channel_stats(channel_id):
+    """Fetch channel stats and estimate monetization."""
+    try:
+        response = youtube.channels().list(
+            part='snippet,statistics',
+            id=channel_id
+        ).execute()
+        if not response['items']:
+            return {'error': 'Channel not found'}
+        item = response['items'][0]
+        subscribers = int(item['statistics'].get('subscriberCount', '0'))
+        total_views = int(item['statistics'].get('viewCount', '0'))
+        video_count = int(item['statistics'].get('videoCount', '0'))
+        # Estimate watch hours (rough: total views * average 5 min video / 60)
+        watch_hours = (total_views * 5) / 60
+        # Monetization eligibility: 1,000 subs, 4,000 watch hours
+        is_monetized = subscribers >= 1000 and watch_hours >= 4000
+        return {
+            'title': item['snippet']['title'],
+            'subscribers': str(subscribers),
+            'video_count': str(video_count),
+            'total_views': str(total_views),
+            'estimated_watch_hours': str(round(watch_hours)),
+            'is_monetized': is_monetized
+        }
+    except Exception as e:
+        return {'error': str(e)}
 
-    soup = BeautifulSoup(r.text, "lxml")
+def process_prompt(data, prompt):
+    """Process natural language prompt."""
+    if not prompt:
+        return data
+    prompt = prompt.lower()
+    if 'monetized' in prompt or 'monetization' in prompt:
+        return {'is_monetized': data.get('is_monetized', False)}
+    elif 'original' in prompt or 'authenticity' in prompt:
+        return {'is_original': data.get('is_original', True)}
+    elif 'views' in prompt:
+        return {'views': data.get('views', data.get('total_views', '0'))}
+    elif 'subscribers' in prompt:
+        return {'subscribers': data.get('subscribers', '0')}
+    elif 'likes' in prompt:
+        return {'likes': data.get('likes', '0')}
+    return data
 
-    # Monetized? look for yt_ad OR "Join" button
-    monetized = "yt_ad" in r.text or bool(soup.select_one("ytd-button-renderer#subscribe-button ytd-channel-memberships-button-renderer"))
-    reason = "Found ads or Join button" if monetized else "No public monetization indicators"
+@app.route('/youtube-monetization', methods=['POST'])
+def youtube_monetization():
+    data = request.get_json()
+    video_url = data.get('video_url', '')
+    channel_id = data.get('channel_id', '')
+    prompt = data.get('prompt', '')
 
-    # Pull public stats for revenue estimate (only videos)
-    estimated = None
-    if target_type == "video":
-        stats_url = "https://www.googleapis.com/youtube/v3/videos"
-        params = {"part": "statistics", "id": vid, "key": None}
-        sr = await http.get(stats_url, params=params)
-        if sr.is_success:
-            views = int(sr.json()["items"][0]["statistics"].get("viewCount", 0))
-            estimated = views * 3.0 / 1000  # default CPM $3
-    return MonetizationResponse(
-        is_monetized=monetized,
-        reason=reason,
-        estimated_revenue=round(estimated, 2) if estimated is not None else None,
-    )
+    if video_url:
+        video_id = extract_video_id(video_url)
+        if not video_id:
+            return jsonify({'error': 'Invalid video URL'}), 400
+        result = get_video_stats(video_id)
+    elif channel_id:
+        channel_id = extract_channel_id(channel_id)
+        if not channel_id:
+            return jsonify({'error': 'Invalid channel ID or URL'}), 400
+        result = get_channel_stats(channel_id)
+    else:
+        return jsonify({'error': 'Provide video_url or channel_id'}), 400
 
-# ---------- Earnings Calculator ----------------------------------------
-from pydantic import BaseModel
+    if result.get('error'):
+        return jsonify(result), 404
 
-class EarningsRequest(BaseModel):
-    views: int
-    cpm: float = 3.0
+    # Process natural language prompt
+    result = process_prompt(result, prompt)
+    return jsonify(result)
 
-@app.post("/earnings-calculator", response_model=EarningsResponse)
-async def earnings_calc(payload: EarningsRequest):
-    revenue = payload.views * payload.cpm / 1000
-    return EarningsResponse(estimated_revenue=round(revenue, 2))
-
-# ---------- Shadowban Detector (legacy) --------------------------------
-@app.get("/shadowban-detector", response_model=ShadowbanResponse)
-async def shadowban_detector():
-    return ShadowbanResponse()
-
-# ---------- Health -----------------------------------------------------
-@app.get("/", include_in_schema=False)
-async def root():
-    return {"status": "ok"}
-
-# ---------- Shutdown ---------------------------------------------------
-@app.on_event("shutdown")
-async def shutdown():
-    await http.aclose()
+if __name__ == '__main__':
+    app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 8080)))
