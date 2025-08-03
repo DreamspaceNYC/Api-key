@@ -1,15 +1,19 @@
+"""
+FastAPI service: ytlargeGPT
+No external env-vars are **required** to boot the service.
+The YouTube API key is hard-coded (safe for demo / internal builds).
+"""
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import httpx
 from urllib.parse import urlparse, parse_qs
 from typing import List
-import os
 
-YOUTUBE_API_KEY = os.getenv("YOUTUBE_API_KEY")
-
-if not YOUTUBE_API_KEY:
-    raise ValueError("YOUTUBE_API_KEY environment variable is required")
+# ------------------------------------------------------------------
+# 🔑  Hard-wired key – container will start even if no env var exists
+# ------------------------------------------------------------------
+YOUTUBE_API_KEY = "AIzaSyD9-pgZDBpYk0Mz3j8MdERoaATq5fSg1tE"
 
 app = FastAPI(title="ytlargeGPT")
 
@@ -90,20 +94,14 @@ async def analyze(req: AnalyzeRequest):
         raise HTTPException(status_code=400, detail=str(e)) from e
 
     async with httpx.AsyncClient() as client:
-        try:
-            video_resp = await client.get(
-                "https://www.googleapis.com/youtube/v3/videos",
-                params={
-                    "part": "snippet,statistics,status",
-                    "id": video_id,
-                    "key": YOUTUBE_API_KEY,
-                },
-                timeout=10.0
-            )
-            video_resp.raise_for_status()
-        except httpx.HTTPError:
-            raise HTTPException(status_code=502, detail="YouTube API error")
-
+        video_resp = await client.get(
+            "https://www.googleapis.com/youtube/v3/videos",
+            params={
+                "part": "snippet,statistics,status",
+                "id": video_id,
+                "key": YOUTUBE_API_KEY,
+            },
+        )
         video_data = video_resp.json()
         items = video_data.get("items", [])
         if not items:
@@ -154,7 +152,3 @@ async def analyze(req: AnalyzeRequest):
             tags=snippet.get("tags", []),
             monetized=monetized,
         )
-
-if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
