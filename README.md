@@ -3,8 +3,7 @@
 ## Prerequisites
 - Python 3.9+
 - LeapCell account
-- Google Cloud API key: `AIzaSyD9-pgDBpYk0Mz3j8MdERoaATq5fSg1tE`
-
+- Google Cloud API key: 
 ## Setup
 1. Install dependencies:
    ```bash
@@ -17,7 +16,7 @@
 2. Create a new project and upload the project folder.
 3. Set environment variable:
    - Key: `API_KEY`
-   - Value: `AIzaSyD9-pgDBpYk0Mz3j8MdERoaATq5fSg1tE`
+   - Value: `
 4. Deploy the app. Note the generated endpoint URL (e.g., `https://your-leapcell-endpoint.com`).
 5. Update `openapi.yaml` with your endpoint URL.
 
