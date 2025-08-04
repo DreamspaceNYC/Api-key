@@ -1,51 +1,28 @@
-# YouTube Video Analysis API
+# YouTube Toolkit API Deployment
 
-A FastAPI application that mimics ytlarge.com, fetching YouTube video metadata (title, views, likes, comments, etc.) from a video URL. Deployed on LeapCell and integrated with ChatGPT Custom GPT Action.
+## Prerequisites
+- Python 3.9+
+- LeapCell account
+- Google Cloud API key: `AIzaSyD9-pgDBpYk0Mz3j8MdERoaATq5fSg1tE`
 
 ## Setup
-
-1. **Clone the Repository**:
+1. Install dependencies:
    ```bash
-   git clone https://github.com/your-username/youtube-analysis-api.git
-   cd youtube-analysis-api
+   pip install fastapi uvicorn google-api-python-client
    ```
-2. **Install Dependencies**:
-   ```bash
-   pip install -r requirements.txt
-   ```
-3. **Set Environment Variables**: Create a `.env` file with:
-   ```
-   YOUTUBE_API_KEY=your_youtube_api_key_here
-   ```
-   Get your API key from Google Cloud Console.
-4. **Run Locally**:
-   ```bash
-   uvicorn main:app --reload
-   ```
+2. Save `main.py` and `openapi.yaml` in a project folder.
 
-## Deploy to LeapCell
+## Deployment on LeapCell
+1. Sign up/login at [LeapCell](https://leapcell.com).
+2. Create a new project and upload the project folder.
+3. Set environment variable:
+   - Key: `API_KEY`
+   - Value: `AIzaSyD9-pgDBpYk0Mz3j8MdERoaATq5fSg1tE`
+4. Deploy the app. Note the generated endpoint URL (e.g., `https://your-leapcell-endpoint.com`).
+5. Update `openapi.yaml` with your endpoint URL.
 
-1. Connect this repo to LeapCell.
-2. Set `YOUTUBE_API_KEY` in LeapCell’s environment variables.
-3. Deploy using LeapCell’s GitHub integration.
-
-## API Endpoint
-
-- **POST `/video-stats`**: Accepts a JSON body with `video_url` and returns video metadata. Example:
-  ```bash
-  curl -X POST "https://your-leapcell-app.leapcell.io/video-stats" \
-       -H "Content-Type: application/json" \
-       -d '{"video_url": "https://www.youtube.com/watch?v=dQw4w9WgXcQ"}'
-  ```
-
-## GPT Action
-
-- Import the OpenAPI schema from `https://your-leapcell-app.leapcell.io/openapi.json` in ChatGPT’s GPT builder.
-
-	•	Advanced NLP: Use an LLM (e.g., OpenAI) for summarizing videos or processing complex prompts.
-	•	Additional Tools: Implement ytlarge.com’s secondary features (e.g., thumbnail downloader, tag extractor) as new endpoints.
-	•	Authentication: Add API key or OAuth for secure access.
-Contributing
-Contributions are welcome! Submit a pull request or open an issue for bugs, feature requests, or improvements.
-License
-This project is licensed under the MIT License. See LICENSE for details.
+## Connect to GPT Action
+1. Go to [chat.openai.com/create](https://chat.openai.com/create).
+2. Create a new GPT and go to the "Configure" tab.
+3. Add a new action, upload `openapi.yaml`.
+4. Save and test with prompts like "Check monetization for dQw4w9WgXcQ".
